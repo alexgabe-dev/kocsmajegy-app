@@ -1,0 +1,164 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      restaurants: {
+        Row: {
+          id: string
+          name: string
+          address: string
+          price_tier: number
+          average_rating: number | null
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          address: string
+          price_tier: number
+          average_rating?: number | null
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          address?: string
+          price_tier?: number
+          average_rating?: number | null
+          created_at?: string
+          user_id?: string
+        }
+      }
+      reviews: {
+        Row: {
+          id: string
+          restaurant_id: string
+          user_id: string
+          rating: number
+          message: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          user_id: string
+          rating: number
+          message: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          user_id?: string
+          rating?: number
+          message?: string
+          created_at?: string
+        }
+      }
+      dishes: {
+        Row: {
+          id: string
+          review_id: string
+          name: string
+          price: number | null
+        }
+        Insert: {
+          id?: string
+          review_id: string
+          name: string
+          price?: number | null
+        }
+        Update: {
+          id?: string
+          review_id?: string
+          name?: string
+          price?: number | null
+        }
+      }
+      photos: {
+        Row: {
+          id: string
+          restaurant_id: string | null
+          review_id: string | null
+          url: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          restaurant_id?: string | null
+          review_id?: string | null
+          url: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string | null
+          review_id?: string | null
+          url?: string
+          created_at?: string
+          user_id?: string
+        }
+      }
+      favorites: {
+        Row: {
+          id: string
+          user_id: string
+          restaurant_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          restaurant_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          restaurant_id?: string
+          created_at?: string
+        }
+      }
+      profiles: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          avatar_url: string | null
+          is_admin: boolean
+          created_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          email: string
+          avatar_url?: string | null
+          is_admin?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string
+          avatar_url?: string | null
+          is_admin?: boolean
+          created_at?: string
+        }
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+  }
+}
