@@ -30,7 +30,11 @@ export default function AddRestaurantPage() {
 
     try {
       // Étterem létrehozása
-      const restaurantId = await createRestaurant(data.name, data.address, data.priceTier, user.id)
+      const restaurantId = await createRestaurant({ 
+  name: data.name, 
+  address: data.address, 
+  priceTier: data.priceTier 
+}, user.id)
 
       // Fotók feltöltése, ha vannak
       if (data.photos.length > 0) {
@@ -39,9 +43,10 @@ export default function AddRestaurantPage() {
       }
 
       router.push(`/restaurants/${restaurantId}`)
-    } catch (err) {
+    } catch (err: any) {
       console.error("Hiba a hely hozzáadásakor:", err)
-      setError("Nem sikerült hozzáadni a helyet. Kérjük, próbáld újra.")
+      // Részletes hibaüzenet megjelenítése a felhasználónak
+      setError(err.message || "Nem sikerült hozzáadni a helyet. Kérjük, próbáld újra.")
       setIsSubmitting(false)
     }
   }

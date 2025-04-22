@@ -12,25 +12,24 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Kocsmajegy",
-  description: "Kövesd és értékeld kedvenc éttermeidet és bárjaidat",
-    generator: 'v0.dev'
+  description: "Fedezd fel a legjobb kocsmákat és éttermeket Magyarországon",
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="hu" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AuthProvider>
+      <body className={inter.className} suppressHydrationWarning>
+        <AuthProvider>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <Navbar />
             <main className="pb-20 md:pb-0">{children}</main>
             <BottomNavigation />
-          </AuthProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   )

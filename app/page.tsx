@@ -26,6 +26,8 @@ export default function Home() {
       try {
         const data = await getRestaurants()
         setRestaurants(data)
+        // Ha nincs hiba, de üres a lista, akkor nem állítunk be hibaüzenetet
+        setError(null)
       } catch (err) {
         setError("Nem sikerült betölteni az éttermeket")
         console.error(err)

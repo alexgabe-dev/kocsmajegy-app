@@ -31,8 +31,12 @@ export default function LoginPage() {
     try {
       await login(email, password)
       router.push("/")
-    } catch (err) {
-      setError("Érvénytelen e-mail vagy jelszó")
+    } catch (err: any) {
+      if (err.message.includes("Invalid login credentials")) {
+        setError("Hibás e-mail cím vagy jelszó")
+      } else {
+        setError("A bejelentkezés sikertelen. Kérjük, próbáld újra.")
+      }
       console.error(err)
     } finally {
       setIsLoading(false)
@@ -40,8 +44,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container flex items-center justify-center min-h-[80vh] py-8">
-      <Card className="w-full max-w-md">
+    <div className="container flex items-center justify-center min-h-[80vh] py-8" suppressHydrationWarning>
+      <Card className="w-full max-w-md" suppressHydrationWarning>
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-2">
             <Utensils className="h-10 w-10 text-orange-600 dark:text-orange-500" />
@@ -53,19 +57,37 @@ export default function LoginPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" name="email" type="email" placeholder="pelda@email.com" required />
+              <Input 
+                id="email" 
+                name="email" 
+                type="email" 
+                placeholder="pelda@email.com" 
+                required 
+                suppressHydrationWarning
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Jelszó</Label>
-              <Input id="password" name="password" type="password" required />
+              <Input 
+                id="password" 
+                name="password" 
+                type="password" 
+                required 
+                suppressHydrationWarning
+              />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive bg-destructive/10 p-2 rounded-md" suppressHydrationWarning>
+                {error}
+              </p>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button
               type="submit"
               className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-700"
               disabled={isLoading}
+              suppressHydrationWarning
             >
               {isLoading ? (
                 <>
@@ -77,7 +99,7 @@ export default function LoginPage() {
               )}
             </Button>
             <div className="text-center text-sm">
-              Nincs még fiókod?{" "}
+              Még nincs fiókod?{" "}
               <Link href="/register" className="text-orange-600 hover:underline dark:text-orange-500">
                 Regisztráció
               </Link>

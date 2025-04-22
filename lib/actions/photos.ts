@@ -1,89 +1,109 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { supabase } from "@/lib/supabase"
+import { supabase } from "../supabase"
+import type { Database } from "../database.types"
+
+type Photo = Database["public"]["Tables"]["photos"]["Row"]
+type NewPhoto = Database["public"]["Tables"]["photos"]["Insert"]
 
 // Fotó feltöltése
-export async function uploadPhoto(
-  file: File,
-  userId: string,
-  restaurantId?: string,
-  reviewId?: string,
-): Promise<string> {
-  // Egyedi fájlnév generálása
-  const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
+export async function uploadPhoto(file: File, userId: string, restaurantId?: string, reviewId?: string) {
+  const fileExt = file.name.split('.').pop()
+  const fileName = `${Math.random()}.${fileExt}`
   const filePath = `${userId}/${fileName}`
 
-  // Feltöltés a Supabase Storage-ba
-  const { data: uploadData, error: uploadError } = await supabase.storage.from("photos").upload(filePath, file)
+  const { error: uploadError } = await supabase.storage
+    .from('photos')
+    .upload(filePath, file)
 
-  if (uploadError) {
-    console.error("Error uploading photo:", uploadError)
-    throw new Error("Nem sikerült feltölteni a képet")
-  }
+  if (uploadError) throw uploadError
 
-  // Publikus URL lekérése
-  const { data: urlData } = supabase.storage.from("photos").getPublicUrl(filePath)
+  const { data: { publicUrl } } = supabase.storage
+    .from('photos')
+    .getPublicUrl(filePath)
 
-  const publicUrl = urlData.publicUrl
-
-  // Fotó rekord létrehozása az adatbázisban
-  const { data: photoData, error: photoError } = await supabase
+  const { data, error } = await supabase
     .from("photos")
     .insert({
-      restaurant_id: restaurantId || null,
-      review_id: reviewId || null,
       url: publicUrl,
       user_id: userId,
+      restaurant_id: restaurantId,
+      review_id: reviewId
     })
-    .select("id")
+    .select()
     .single()
 
-  if (photoError) {
-    console.error("Error creating photo record:", photoError)
-    throw new Error("Nem sikerült létrehozni a fotó rekordot")
-  }
+  if (error) throw error
 
   if (restaurantId) {
     revalidatePath(`/restaurants/${restaurantId}`)
   }
+  if (reviewId) {
+    revalidatePath(`/reviews/${reviewId}`)
+  }
 
-  return photoData.id
+  return data
+}
+
+export async function getPhotosByRestaurantId(restaurantId: string) {
+  const { data, error } = await supabase
+    .from("photos")
+    .select(`
+      *,
+      profiles (name, avatar_url)
+    `)
+    .eq("restaurant_id", restaurantId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function getPhotosByReviewId(reviewId: string) {
+  const { data, error } = await supabase
+    .from("photos")
+    .select(`
+      *,
+      profiles (name, avatar_url)
+    `)
+    .eq("review_id", reviewId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
 }
 
 // Fotó törlése
-export async function deletePhoto(id: string, restaurantId?: string): Promise<void> {
-  // Először lekérjük a fotó adatait, hogy megkapjuk az URL-t
-  const { data: photo, error: fetchError } = await supabase.from("photos").select("url").eq("id", id).single()
+export async function deletePhoto(id: string) {
+  const { data: photo, error: fetchError } = await supabase
+    .from("photos")
+    .select("url, restaurant_id, review_id")
+    .eq("id", id)
+    .single()
 
-  if (fetchError) {
-    console.error("Error fetching photo:", fetchError)
-    throw new Error("Nem sikerült lekérni a fotót")
+  if (fetchError) throw fetchError
+
+  const urlParts = photo.url.split('/')
+  const filePath = urlParts.slice(urlParts.indexOf('photos')).join('/')
+
+  const { error: deleteError } = await supabase.storage
+    .from('photos')
+    .remove([filePath])
+
+  if (deleteError) throw deleteError
+
+  const { error: dbError } = await supabase
+    .from("photos")
+    .delete()
+    .eq("id", id)
+
+  if (dbError) throw dbError
+
+  if (photo.restaurant_id) {
+    revalidatePath(`/restaurants/${photo.restaurant_id}`)
   }
-
-  // Kinyerjük a fájl elérési útját az URL-ből
-  const url = new URL(photo.url)
-  const filePath = url.pathname.split("/").pop()
-
-  if (filePath) {
-    // Töröljük a fájlt a Storage-ból
-    const { error: storageError } = await supabase.storage.from("photos").remove([filePath])
-
-    if (storageError) {
-      console.error("Error deleting photo from storage:", storageError)
-      // Folytatjuk a rekord törlésével, még ha a fájl törlése nem is sikerült
-    }
-  }
-
-  // Töröljük a rekordot az adatbázisból
-  const { error: deleteError } = await supabase.from("photos").delete().eq("id", id)
-
-  if (deleteError) {
-    console.error("Error deleting photo record:", deleteError)
-    throw new Error("Nem sikerült törölni a fotó rekordot")
-  }
-
-  if (restaurantId) {
-    revalidatePath(`/restaurants/${restaurantId}`)
+  if (photo.review_id) {
+    revalidatePath(`/reviews/${photo.review_id}`)
   }
 }

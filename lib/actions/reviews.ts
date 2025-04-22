@@ -1,97 +1,122 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { supabase } from "@/lib/supabase"
+import { supabase } from "../supabase"
+import type { Database } from "../database.types"
 
-// Értékelés létrehozása
-export async function createReview(
-  restaurantId: string,
-  userId: string,
-  rating: number,
-  message: string,
-  dishes?: { name: string; price: number | null }[],
-): Promise<string> {
-  // Tranzakció kezdése
-  const { data: reviewData, error: reviewError } = await supabase
+type Review = Database["public"]["Tables"]["reviews"]["Row"]
+type NewReview = Database["public"]["Tables"]["reviews"]["Insert"]
+type Dish = Database["public"]["Tables"]["dishes"]["Row"]
+type NewDish = Database["public"]["Tables"]["dishes"]["Insert"]
+
+export async function getReviewsByRestaurantId(restaurantId: string) {
+  const { data, error } = await supabase
     .from("reviews")
-    .insert({
-      restaurant_id: restaurantId,
-      user_id: userId,
-      rating,
-      message,
-    })
-    .select("id")
+    .select(`
+      *,
+      dishes (*),
+      photos (url),
+      profiles (name, avatar_url)
+    `)
+    .eq("restaurant_id", restaurantId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function createReview(review: NewReview, dishes: NewDish[] = []) {
+  const { data: newReview, error: reviewError } = await supabase
+    .from("reviews")
+    .insert(review)
+    .select()
     .single()
 
-  if (reviewError) {
-    console.error("Error creating review:", reviewError)
-    throw new Error("Nem sikerült létrehozni az értékelést")
-  }
+  if (reviewError) throw reviewError
 
-  const reviewId = reviewData.id
-
-  // Ételek hozzáadása, ha vannak
-  if (dishes && dishes.length > 0) {
-    const dishRecords = dishes.map((dish) => ({
-      review_id: reviewId,
-      name: dish.name,
-      price: dish.price,
+  if (dishes.length > 0) {
+    const dishesWithReviewId = dishes.map(dish => ({
+      ...dish,
+      review_id: newReview.id
     }))
 
-    const { error: dishesError } = await supabase.from("dishes").insert(dishRecords)
+    const { error: dishesError } = await supabase
+      .from("dishes")
+      .insert(dishesWithReviewId)
 
-    if (dishesError) {
-      console.error("Error adding dishes:", dishesError)
-      // Nem dobunk hibát, mert az értékelés már létrejött
-    }
+    if (dishesError) throw dishesError
   }
 
   // Étterem átlagos értékelésének frissítése
-  await updateRestaurantAverageRating(restaurantId)
+  await updateRestaurantAverageRating(review.restaurant_id)
 
-  revalidatePath(`/restaurants/${restaurantId}`)
-  return reviewId
+  revalidatePath(`/restaurants/${review.restaurant_id}`)
+  return newReview
 }
 
-// Értékelés törlése
-export async function deleteReview(id: string, restaurantId: string): Promise<void> {
-  const { error } = await supabase.from("reviews").delete().eq("id", id)
+export async function updateReview(id: string, review: Partial<Review>, dishes: Partial<Dish>[] = []) {
+  const { data: updatedReview, error: reviewError } = await supabase
+    .from("reviews")
+    .update(review)
+    .eq("id", id)
+    .select()
+    .single()
 
-  if (error) {
-    console.error("Error deleting review:", error)
-    throw new Error("Nem sikerült törölni az értékelést")
+  if (reviewError) throw reviewError
+
+  if (dishes.length > 0) {
+    const { error: dishesError } = await supabase
+      .from("dishes")
+      .upsert(dishes)
+
+    if (dishesError) throw dishesError
   }
 
   // Étterem átlagos értékelésének frissítése
-  await updateRestaurantAverageRating(restaurantId)
+  await updateRestaurantAverageRating(updatedReview.restaurant_id)
 
-  revalidatePath(`/restaurants/${restaurantId}`)
+  revalidatePath(`/restaurants/${updatedReview.restaurant_id}`)
+  return updatedReview
 }
 
-// Étterem átlagos értékelésének frissítése
-async function updateRestaurantAverageRating(restaurantId: string): Promise<void> {
-  // Lekérjük az összes értékelést az étteremhez
+export async function deleteReview(id: string) {
+  const { data: review, error: fetchError } = await supabase
+    .from("reviews")
+    .select("restaurant_id")
+    .eq("id", id)
+    .single()
+
+  if (fetchError) throw fetchError
+
+  const { error: deleteError } = await supabase
+    .from("reviews")
+    .delete()
+    .eq("id", id)
+
+  if (deleteError) throw deleteError
+
+  // Étterem átlagos értékelésének frissítése
+  await updateRestaurantAverageRating(review.restaurant_id)
+
+  revalidatePath(`/restaurants/${review.restaurant_id}`)
+}
+
+async function updateRestaurantAverageRating(restaurantId: string) {
   const { data: reviews, error: reviewsError } = await supabase
     .from("reviews")
     .select("rating")
     .eq("restaurant_id", restaurantId)
 
-  if (reviewsError) {
-    console.error("Error fetching reviews for rating update:", reviewsError)
-    return
-  }
+  if (reviewsError) throw reviewsError
 
-  // Kiszámoljuk az átlagos értékelést
-  const averageRating =
-    reviews.length > 0 ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : null
+  const averageRating = reviews?.length
+    ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
+    : null
 
-  // Frissítjük az étterem átlagos értékelését
   const { error: updateError } = await supabase
     .from("restaurants")
     .update({ average_rating: averageRating })
     .eq("id", restaurantId)
 
-  if (updateError) {
-    console.error("Error updating restaurant average rating:", updateError)
-  }
+  if (updateError) throw updateError
 }

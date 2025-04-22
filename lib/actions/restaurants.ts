@@ -1,169 +1,134 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { supabase } from "@/lib/supabase"
-import type { Restaurant } from "@/lib/types"
+import { supabase, supabaseQuery } from "../supabase"
+import type { Database } from "../database.types"
+
+type Restaurant = Database["public"]["Tables"]["restaurants"]["Row"]
+type NewRestaurant = Database["public"]["Tables"]["restaurants"]["Insert"]
 
 // Éttermek lekérése
-export async function getRestaurants(): Promise<Restaurant[]> {
-  const { data, error } = await supabase
-    .from("restaurants")
-    .select(`
-      id, 
-      name, 
-      address, 
-      price_tier, 
-      average_rating, 
-      created_at, 
-      user_id,
-      photos (url)
-    `)
-    .order("created_at", { ascending: false })
+export async function getRestaurants() {
+  try {
+    const { data, error } = await supabase
+      .from("restaurants")
+      .select(`
+        *,
+        photos (url)
+      `)
+      .order("created_at", { ascending: false })
 
-  if (error) {
-    console.error("Error fetching restaurants:", error)
-    throw new Error("Nem sikerült lekérni az éttermeket")
+    if (error) {
+      console.error("Hiba az éttermek lekérésekor:", error)
+      return []
+    }
+    return data || []  
+  } catch (err) {
+    console.error("Váratlan hiba az éttermek lekérésekor:", err)
+    return []
   }
-
-  // Adatok átalakítása a frontend típusoknak megfelelően
-  return data.map((restaurant) => ({
-    id: restaurant.id,
-    name: restaurant.name,
-    address: restaurant.address,
-    priceTier: restaurant.price_tier,
-    averageRating: restaurant.average_rating,
-    photos: restaurant.photos?.map((photo) => photo.url) || [],
-    createdAt: restaurant.created_at,
-    userId: restaurant.user_id,
-  }))
 }
 
 // Étterem lekérése ID alapján
-export async function getRestaurantById(id: string): Promise<Restaurant | null> {
+export async function getRestaurantById(id: string) {
   const { data, error } = await supabase
     .from("restaurants")
     .select(`
-      id, 
-      name, 
-      address, 
-      price_tier, 
-      average_rating, 
-      created_at, 
-      user_id,
-      photos (id, url),
+      *,
+      photos (url),
       reviews (
-        id, 
-        rating, 
-        message, 
-        created_at, 
+        id,
+        rating,
+        message,
+        created_at,
         user_id,
-        dishes (id, name, price),
-        photos (id, url)
+        dishes (name, price),
+        photos (url)
       )
     `)
     .eq("id", id)
     .single()
 
-  if (error) {
-    if (error.code === "PGRST116") {
-      return null // Nincs találat
-    }
-    console.error("Error fetching restaurant:", error)
-    throw new Error("Nem sikerült lekérni az éttermet")
-  }
-
-  // Adatok átalakítása a frontend típusoknak megfelelően
-  return {
-    id: data.id,
-    name: data.name,
-    address: data.address,
-    priceTier: data.price_tier,
-    averageRating: data.average_rating,
-    photos: data.photos?.map((photo) => photo.url) || [],
-    reviews:
-      data.reviews?.map((review) => ({
-        id: review.id,
-        restaurantId: id,
-        userId: review.user_id,
-        rating: review.rating,
-        message: review.message,
-        dishes:
-          review.dishes?.map((dish) => ({
-            id: dish.id,
-            reviewId: review.id,
-            name: dish.name,
-            price: dish.price,
-          })) || [],
-        photos: review.photos?.map((photo) => photo.url) || [],
-        createdAt: review.created_at,
-      })) || [],
-    createdAt: data.created_at,
-    userId: data.user_id,
-  }
+  if (error) throw error
+  return data
 }
 
 // Új étterem létrehozása
-export async function createRestaurant(
-  name: string,
-  address: string,
-  priceTier: number,
-  userId: string,
-): Promise<string> {
-  const { data, error } = await supabase
-    .from("restaurants")
-    .insert({
-      name,
-      address,
-      price_tier: priceTier,
-      user_id: userId,
-    })
-    .select("id")
-    .single()
+export async function createRestaurant(restaurantData: { name: string; address: string; price_tier: number }, userId: string) {
+  try {
+    // Alapvető adatvalidáció
+    if (!restaurantData.name || !restaurantData.address || !userId) {
+      throw new Error('Hiányzó kötelező adatok')
+    }
 
-  if (error) {
-    console.error("Error creating restaurant:", error)
-    throw new Error("Nem sikerült létrehozni az éttermet")
+    const newRestaurant = {
+      name: restaurantData.name.trim(),
+      address: restaurantData.address.trim(),
+      price_tier: restaurantData.price_tier,
+      userid: userId
+    }
+
+    const { data, error } = await supabase
+      .from("restaurants")
+      .insert(newRestaurant)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Hiba az étterem létrehozásakor:', {
+        error,
+        inputData: newRestaurant
+      })
+      throw new Error(`Adatbázis hiba: ${error.message}`)
+    }
+    
+    if (!data || !data.id) {
+      throw new Error("Nem sikerült létrehozni az éttermet: hiányzó adatok")
+    }
+    
+    revalidatePath("/")
+    return data.id
+  } catch (err) {
+    console.error("Váratlan hiba az étterem létrehozásakor:", err)
+    throw err
   }
-
-  revalidatePath("/")
-  return data.id
 }
 
 // Étterem frissítése
-export async function updateRestaurant(
-  id: string,
-  updates: {
-    name?: string
-    address?: string
-    priceTier?: number
-  },
-): Promise<void> {
-  const { error } = await supabase
-    .from("restaurants")
-    .update({
-      name: updates.name,
-      address: updates.address,
-      price_tier: updates.priceTier,
-    })
-    .eq("id", id)
+export async function updateRestaurant(id: string, restaurant: Partial<Restaurant>) {
+  try {
+    const { data, error } = await supabase
+      .from("restaurants")
+      .update(restaurant)
+      .eq("id", id)
+      .select()
+      .single()
 
-  if (error) {
-    console.error("Error updating restaurant:", error)
-    throw new Error("Nem sikerült frissíteni az éttermet")
+    if (error) {
+      console.error("Hiba az étterem frissítésekor:", error)
+      throw new Error(error.message || "Nem sikerült frissíteni az éttermet")
+    }
+    
+    if (!data) {
+      throw new Error("Nem sikerült frissíteni az éttermet: hiányzó adatok")
+    }
+    
+    revalidatePath(`/restaurants/${id}`)
+    revalidatePath("/")
+    return data
+  } catch (err) {
+    console.error("Váratlan hiba az étterem frissítésekor:", err)
+    throw err
   }
-
-  revalidatePath(`/restaurants/${id}`)
-  revalidatePath("/")
 }
 
 // Étterem törlése
-export async function deleteRestaurant(id: string): Promise<void> {
-  const { error } = await supabase.from("restaurants").delete().eq("id", id)
+export async function deleteRestaurant(id: string) {
+  const { error } = await supabase
+    .from("restaurants")
+    .delete()
+    .eq("id", id)
 
-  if (error) {
-    console.error("Error deleting restaurant:", error)
-    throw new Error("Nem sikerült törölni az éttermet")
-  }
-
+  if (error) throw error
   revalidatePath("/")
 }

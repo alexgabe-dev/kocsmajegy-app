@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Camera, Loader2, X, AlertCircle } from "lucide-react"
 import { motion } from "framer-motion"
@@ -39,6 +39,11 @@ export function RestaurantForm({ onSubmit, isSubmitting = false, error = null, i
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([])
   const [formError, setFormError] = useState<string | null>(error)
+
+  // Frissíti a formError állapotot, amikor az error prop változik
+  useEffect(() => {
+    setFormError(error)
+  }, [error])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
