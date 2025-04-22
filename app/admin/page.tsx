@@ -627,7 +627,7 @@ function AdminSettingsTab() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
               <input
                 type="text"
-                value={process.env.TEST_KEY}
+                value=""
                 readOnly
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
               />
